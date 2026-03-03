@@ -1,25 +1,26 @@
 # AI Enrichment Status - MTH240
 
-## How It Works
+## Template
+Using detailed template: `templates/ai_enrichment_template.md`
 
-1. **Raw files** are in `processing/` (extracted text, basic metadata)
-2. **Agent (me)** manually processes each file through Kimi K2.5
-3. **Enriched files** go to `finished/{midterms,finals,content}/`
+## Output Format
+Per-question JSON with:
+- Complete problem statement in LaTeX
+- Granular solution steps (one action per step)
+- Metadata (difficulty, topics, techniques)
+- Coaching layer (first_move, common_mistakes, pattern_signal, trap_check, exam_tip)
 
-## Current Queue
+## Processing Queue
 
 Run `python courses/MTH240/scripts/enrich_with_ai.py --list` to see pending files.
 
 ## Processing Log
 
-| File | Status | Enriched By | Date | Notes |
-|------|--------|-------------|------|-------|
-| | | | | |
+| File | Questions | Status | Enriched By | Date | Notes |
+|------|-----------|--------|-------------|------|-------|
+| | | | | | |
 
-## Process
+## Per-Question Output
 
-1. Get list of pending files from agent
-2. Agent generates prompt and processes with Kimi
-3. Agent returns enriched JSON
-4. Save to `finished/` with `_enrichment` metadata
-5. Update this log
+Each question saved as:
+`finished/{midterms,finals}/MTH240_{year}_{type}_{version}_Q{number}.json`

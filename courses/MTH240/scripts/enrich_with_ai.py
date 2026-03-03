@@ -1,172 +1,158 @@
 #!/usr/bin/env python3
 """
-AI Enrichment - Manual processing interface
-
-This script prepares files for manual AI enrichment.
-The actual AI processing is done by the agent (me) through conversation.
+AI Enrichment - Manual processing interface using detailed template
 """
 
 import json
 from pathlib import Path
 from datetime import datetime
 
-def prepare_for_enrichment():
-    """List all files ready for AI enrichment"""
+def load_template() -> str:
+    """Load the enrichment template"""
+    template_path = Path("courses/MTH240/templates/ai_enrichment_template.md")
+    with open(template_path) as f:
+        return f.read()
+
+def get_pending_files() -> list:
+    """Get list of files ready for enrichment"""
     processing_dir = Path("courses/MTH240/processing")
     finished_dir = Path("courses/MTH240/finished")
     
-    ready = []
+    pending = []
     for json_file in processing_dir.glob("*.json"):
-        # Check if already enriched
-        finished_path = finished_dir / json_file.name
-        if finished_path.exists():
-            continue
+        # Check if already enriched in any finished subdir
+        relative = json_file.name
+        already_done = False
+        for subdir in ["midterms", "finals", "content"]:
+            if (finished_dir / subdir / relative).exists():
+                already_done = True
+                break
         
-        with open(json_file) as f:
+        if not already_done:
+            with open(json_file) as f:
+                data = json.load(f)
+            
+            meta = data.get("metadata", {})
+            pending.append({
+                "file": json_file.name,
+                "path": json_file,
+                "year": meta.get("year"),
+                "type": meta.get("exam_type"),
+                "version": meta.get("exam_version"),
+                "questions": len(data.get("questions", [])),
+                "solution_provider": meta.get("solution_provider", "unknown")
+            })
+    
+    return pending
+
+def generate_enrichment_batch(pending: list, batch_size: int = 3) -> str:
+    """Generate prompt for enriching a batch of questions"""
+    
+    template = load_template()
+    
+    prompt = f"""# AI Enrichment Task
+
+{template}
+
+---
+
+## FILES TO PROCESS
+
+"""
+    
+    for item in pending[:batch_size]:
+        with open(item["path"]) as f:
             data = json.load(f)
         
-        meta = data.get("metadata", {})
-        ready.append({
-            "file": json_file.name,
-            "year": meta.get("year"),
-            "type": meta.get("exam_type"),
-            "questions": len(data.get("questions", [])),
-            "path": str(json_file)
-        })
-    
-    return ready
-
-def mark_enriched(processing_file: Path, enriched_data: dict):
-    """Save enriched data to finished/"""
-    finished_dir = Path("courses/MTH240/finished")
-    
-    # Determine subfolder
-    exam_type = enriched_data.get("metadata", {}).get("exam_type", "unknown")
-    if exam_type == "midterm":
-        subfolder = "midterms"
-    elif exam_type == "final":
-        subfolder = "finals"
-    else:
-        subfolder = "content"
-    
-    output_dir = finished_dir / subfolder
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    output_file = output_dir / processing_file.name
-    
-    # Add enrichment metadata
-    enriched_data["_enrichment"] = {
-        "enriched_by": "agent",
-        "enriched_at": datetime.now().isoformat(),
-        "method": "manual_kimi_k25"
-    }
-    
-    with open(output_file, 'w') as f:
-        json.dump(enriched_data, f, indent=2)
-    
-    print(f"Saved enriched: {output_file}")
-    return output_file
-
-def generate_enrichment_prompt(json_file: Path) -> str:
-    """Generate the prompt for AI enrichment"""
-    with open(json_file) as f:
-        data = json.load(f)
-    
-    meta = data.get("metadata", {})
-    questions = data.get("questions", [])
-    raw_text = data.get("raw_text", "")[:3000]
-    
-    prompt = f"""# AI Enrichment Task: MTH240 Exam
-
-## File: {json_file.name}
-- Year: {meta.get('year')}
-- Type: {meta.get('exam_type')}
-- Solution Provider: {meta.get('solution_provider')}
-- Questions Detected: {len(questions)}
-
-## Raw Text Preview:
-```
-{raw_text}
-```
-
-## Current Question Structure:
-"""
-    
-    for q in questions[:3]:  # Show first 3
         prompt += f"""
-Q{q.get('number')}: {q.get('marks')} marks
-{q.get('raw_text', '')[:200]}...
+### {item['file']}
+- Year: {item['year']}, Type: {item['type']}, Version: {item['version']}
+- Solution Provider: {item['solution_provider']}
+- Questions: {item['questions']}
+
+Raw text preview:
+```
+{data.get('raw_text', '')[:1500]}...
+```
+
+Questions detected:
 """
+        for q in data.get("questions", [])[:5]:
+            prompt += f"\nQ{q.get('number')}: {q.get('marks')} marks\n{q.get('raw_text', '')[:200]}...\n"
     
     prompt += """
 
-## Enrichment Tasks:
+## OUTPUT INSTRUCTIONS
 
-1. **Parse Questions**: Convert raw text to clean LaTeX
-2. **Identify Solutions**: Professor vs Student vs None
-3. **Extract Topics**: Integration techniques, series, etc.
-4. **Verify Solutions**: Check if provided solutions are correct
-5. **Flag Issues**: Truncated text, unclear problems
+For each question, output a complete JSON object following the template above.
+Save each question as a separate JSON file in the format:
+`MTH240_{year}_{type}_{version}_Q{number}.json`
 
-## Output Format:
-Return the complete enriched JSON with:
-- questions[].problem_latex (clean LaTeX)
-- questions[].topics[] (list of topics)
-- questions[].solution.provider (professor/student/none)
-- questions[].solution.verified (true/false)
-- questions[].solution.latex (solution in LaTeX)
-
-## Important:
-- Preserve ALL content exactly
-- Do not hallucinate missing solutions
-- Flag uncertain cases for review
+Ensure:
+1. All LaTeX is properly formatted
+2. Solution steps are granular
+3. Common mistakes are specific with math context
+4. Metadata accurately reflects difficulty and topics
 """
     
     return prompt
+
+def save_enriched_question(question_data: dict, metadata: dict):
+    """Save an enriched question to finished/"""
+    
+    finished_dir = Path("courses/MTH240/finished")
+    
+    # Determine subdirectory
+    exam_type = metadata.get("exam_type", "unknown")
+    if exam_type == "midterm":
+        subdir = "midterms"
+    elif exam_type == "final":
+        subdir = "finals"
+    else:
+        subdir = "content"
+    
+    output_dir = finished_dir / subdir
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Build filename
+    year = metadata.get("year", "unknown")
+    version = metadata.get("exam_version", "")
+    q_num = question_data.get("question_number", 0)
+    
+    filename = f"MTH240_{year}_{exam_type}_{version}_Q{q_num:02d}.json"
+    output_path = output_dir / filename
+    
+    # Add enrichment metadata
+    question_data["_enrichment"] = {
+        "enriched_by": "agent_manual",
+        "enriched_at": datetime.now().isoformat(),
+        "source_exam": metadata.get("source_file", ""),
+        "verified": False  # Pending human review
+    }
+    
+    with open(output_path, 'w') as f:
+        json.dump(question_data, f, indent=2)
+    
+    print(f"Saved: {output_path}")
+    return output_path
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--list", action="store_true", help="List files ready for enrichment")
-    parser.add_argument("--prompt", help="Generate prompt for specific file")
+    parser.add_argument("--list", action="store_true")
+    parser.add_argument("--batch", type=int, default=3)
     args = parser.parse_args()
     
     if args.list:
-        ready = prepare_for_enrichment()
-        print(f"Files ready for AI enrichment: {len(ready)}")
-        for item in ready:
-            print(f"  - {item['file']} ({item['year']} {item['type']}, {item['questions']} questions)")
-    
-    elif args.prompt:
-        json_file = Path(args.prompt)
-        if json_file.exists():
-            print(generate_enrichment_prompt(json_file))
+        pending = get_pending_files()
+        print(f"Files ready for enrichment: {len(pending)}")
+        for item in pending:
+            print(f"  - {item['file']}")
+            print(f"    {item['year']} {item['type']} {item['version']}, "
+                  f"{item['questions']} questions, solutions: {item['solution_provider']}")
+    else:
+        pending = get_pending_files()
+        if pending:
+            print(generate_enrichment_batch(pending, args.batch))
         else:
-            print(f"File not found: {json_file}")
-
-def generate_merge_prompt(group_data: dict) -> str:
-    """Generate prompt for merging exam + solutions"""
-    
-    merge_info = group_data.get("_merge_info", {})
-    exam_file = merge_info.get("exam_file")
-    sol_file = merge_info.get("solution_file")
-    
-    prompt = f"""# AI Merge Task: Combine Exam + Solutions
-
-## Files to Merge:
-- Exam: {exam_file}
-- Solutions: {sol_file}
-
-## Task:
-Match each question in the exam with its corresponding solution.
-
-## Rules:
-1. Questions without solutions: mark solution.provider = "none"
-2. Questions with solutions: mark solution.provider = "professor"
-3. Verify solution matches question (don't blindly pair)
-4. If solution seems wrong/incomplete, flag it
-
-## Output:
-Complete JSON with questions[].solution populated from solution file.
-"""
-    return prompt
+            print("No pending files")
