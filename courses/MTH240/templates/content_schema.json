@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MTH240 Content",
+  "type": "object",
+  "required": ["metadata", "content"],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "required": ["course", "content_type", "title"],
+      "properties": {
+        "course": { "const": "MTH240" },
+        "content_type": { 
+          "enum": ["lecture_notes", "study_sheet", "formula_sheet", "practice_problems", "textbook_excerpt"] 
+        },
+        "title": { "type": "string" },
+        "topic": { "type": "string" },
+        "source": { "type": "string" },
+        "page_count": { "type": "integer" },
+        "has_diagrams": { "type": "boolean" },
+        "diagram_count": { "type": "integer" }
+      }
+    },
+    "content": {
+      "type": "object",
+      "properties": {
+        "full_text": { "type": "string" },
+        "pages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "page_number": { "type": "integer" },
+              "text": { "type": "string" },
+              "diagrams": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "diagram_id": { "type": "string" },
+                    "description": { "type": "string" },
+                    "file_path": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "formulas": { "type": "array", "items": { "type": "string" } },
+        "key_concepts": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

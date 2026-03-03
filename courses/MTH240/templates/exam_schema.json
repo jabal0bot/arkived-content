@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MTH240 Exam",
+  "type": "object",
+  "required": ["metadata", "questions"],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "required": ["course", "year", "semester", "exam_type", "total_marks"],
+      "properties": {
+        "course": { "const": "MTH240" },
+        "course_name": { "const": "Calculus II" },
+        "year": { "type": "integer", "minimum": 2000, "maximum": 2030 },
+        "semester": { "enum": ["Winter", "Spring", "Summer", "Fall"] },
+        "exam_type": { "enum": ["midterm", "final"] },
+        "exam_version": { "type": "string", "pattern": "^(M1|M2|V1|V2)?$" },
+        "date": { "type": "string" },
+        "duration_minutes": { "type": "integer" },
+        "total_marks": { "type": "integer" },
+        "solution_provider": { "enum": ["professor", "student", "none", "unknown"] },
+        "solution_quality": { "enum": ["complete", "partial", "none"] }
+      }
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["number", "marks", "problem"],
+        "properties": {
+          "number": { "type": "integer" },
+          "marks": { "type": "integer" },
+          "problem": { "type": "string" },
+          "problem_latex": { "type": "string" },
+          "topics": { "type": "array", "items": { "type": "string" } },
+          "has_subparts": { "type": "boolean" },
+          "subparts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": { "type": "string", "pattern": "^[a-z]$" },
+                "marks": { "type": "integer" },
+                "problem": { "type": "string" },
+                "solution": {
+                  "type": "object",
+                  "properties": {
+                    "text": { "type": "string" },
+                    "latex": { "type": "string" },
+                    "steps": { "type": "array", "items": { "type": "string" } },
+                    "final_answer": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "solution": {
+            "type": "object",
+            "properties": {
+              "provider": { "enum": ["professor", "student", "none", "unknown"] },
+              "text": { "type": "string" },
+              "latex": { "type": "string" },
+              "verified": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

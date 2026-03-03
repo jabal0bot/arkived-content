@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Uploads (keep structure, ignore large files)
+uploads/**/*.zip
+uploads/**/*.pdf
+
+# Processing temp files
+*.tmp
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
