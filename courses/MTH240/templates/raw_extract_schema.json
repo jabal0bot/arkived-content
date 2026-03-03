@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MTH240 Raw Exam Extract",
+  "type": "object",
+  "required": ["document_id", "structure", "content"],
+  "properties": {
+    "document_id": {
+      "type": "object",
+      "properties": {
+        "course": { "const": "MTH240" },
+        "year": { "type": "integer" },
+        "semester": { "enum": ["Winter", "Spring", "Summer", "Fall", ""] },
+        "exam_type": { "enum": ["midterm", "final", "unknown"] },
+        "version": { "enum": ["M1", "M2", "", ""] },
+        "date": { "type": "string" }
+      }
+    },
+    "structure": {
+      "type": "object",
+      "properties": {
+        "pages": { "type": "integer" },
+        "total_marks": { "type": "integer" },
+        "duration_minutes": { "type": "integer" },
+        "question_count": { "type": "integer" }
+      }
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "number": { "type": "integer" },
+          "marks": { "type": "integer" },
+          "has_subparts": { "type": "boolean" },
+          "subparts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": { "type": "string" },
+                "marks": { "type": "integer" }
+              }
+            }
+          },
+          "raw_text": { "type": "string" }
+        }
+      }
+    },
+    "solutions": {
+      "type": "object",
+      "properties": {
+        "present": { "type": "boolean" },
+        "provider": { "enum": ["professor", "student", "unknown", "none"] },
+        "source": { "type": "string" }
+      }
+    },
+    "source_file": {
+      "type": "object",
+      "properties": {
+        "filename": { "type": "string" },
+        "hash_md5": { "type": "string" },
+        "extracted_at": { "type": "string" }
+      }
+    }
+  }
+}
