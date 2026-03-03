@@ -1,84 +1,156 @@
 #!/usr/bin/env python3
 """
-Main upload processing orchestrator for MTH240
-
-Usage: python process_upload.py --zip uploads/MTH240/files.zip
+Universal upload processor - detects and sorts any course
 """
 
 import zipfile
 import shutil
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
 
+COURSE_PATTERNS = {
+    r'MTH\d+': 'MTH',
+    r'PHY\d+': 'PHY', 
+    r'CHY\d+': 'CHY',
+    r'CPS\d+': 'CPS',
+    r'ECN\d+': 'ECN',
+}
+
+def detect_course(filename: str) -> str:
+    """Detect course code from filename"""
+    upper = filename.upper()
+    
+    for pattern, prefix in COURSE_PATTERNS.items():
+        match = re.search(pattern, upper)
+        if match:
+            return match.group(0)
+    
+    return "UNKNOWN"
+
+def create_course_structure(course: str):
+    """Create folder structure for new course"""
+    base = Path(f"courses/{course}")
+    
+    dirs = [
+        base / "raw",
+        base / "processing", 
+        base / "finished/midterms",
+        base / "finished/finals",
+        base / "finished/content",
+        base / "templates",
+        base / "scripts"
+    ]
+    
+    for d in dirs:
+        d.mkdir(parents=True, exist_ok=True)
+    
+    # Copy templates from MTH240 as starting point
+    mth240_templates = Path("courses/MTH240/templates")
+    if mth240_templates.exists():
+        for template in mth240_templates.glob("*.json"):
+            dest = base / "templates" / template.name
+            if not dest.exists():
+                shutil.copy(template, dest)
+    
+    print(f"Created structure for {course}")
+
 def process_zip(zip_path: Path):
     """Process uploaded zip file"""
     
-    course = "MTH240"
+    print(f"Processing: {zip_path.name}")
+    
+    # Detect course
+    course = detect_course(zip_path.name)
+    
+    if course == "UNKNOWN":
+        print("Warning: Could not detect course from filename")
+        print("Files will be extracted for manual review")
+        course = "UNKNOWN"
+    
+    print(f"Detected course: {course}")
+    
+    # Create structure if needed
+    create_course_structure(course)
+    
     raw_dir = Path(f"courses/{course}/raw")
     processing_dir = Path(f"courses/{course}/processing")
     
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    processing_dir.mkdir(parents=True, exist_ok=True)
-    
-    print(f"Processing: {zip_path}")
-    
     # Extract zip
-    extract_dir = raw_dir / "_temp_extract"
+    extract_dir = Path("uploads/_temp_extract")
     extract_dir.mkdir(exist_ok=True)
     
     with zipfile.ZipFile(zip_path, 'r') as z:
         z.extractall(extract_dir)
     
-    # Move PDFs to raw/
+    # Move PDFs and detect sub-courses
     pdf_count = 0
-    for pdf in extract_dir.rglob("*.pdf"):
-        dest = raw_dir / pdf.name
-        shutil.move(pdf, dest)
-        pdf_count += 1
-        print(f"  Extracted: {pdf.name}")
+    course_files = {}
     
-    # Clean up temp
+    for pdf in extract_dir.rglob("*.pdf"):
+        file_course = detect_course(pdf.name)
+        
+        if file_course not in course_files:
+            course_files[file_course] = []
+        
+        # Create structure for this course
+        create_course_structure(file_course)
+        file_raw_dir = Path(f"courses/{file_course}/raw")
+        
+        dest = file_raw_dir / pdf.name
+        shutil.move(pdf, dest)
+        course_files[file_course].append(pdf.name)
+        pdf_count += 1
+    
+    # Clean up
     shutil.rmtree(extract_dir, ignore_errors=True)
     
-    print(f"\nExtracted {pdf_count} PDFs")
+    # Log sorting
+    with open("uploads/.sorting_log", "a") as f:
+        f.write(f"\n{zip_path.name}:\n")
+        for c, files in course_files.items():
+            f.write(f"  {c}: {len(files)} files\n")
     
-    # Run deduplication
-    print("\nGrouping related exams...")
-    subprocess.run([sys.executable, "courses/MTH240/scripts/deduplicate.py"])
+    print(f"\nExtracted {pdf_count} PDFs into {len(course_files)} course(s):")
+    for c, files in course_files.items():
+        print(f"  {c}: {len(files)} files")
     
-    # Run raw extraction
-    print("\nExtracting raw structure...")
-    for pdf in raw_dir.glob("*.pdf"):
-        output = processing_dir / f"{pdf.stem}_raw.json"
-        if output.exists():
+    # Process each course
+    for c in course_files.keys():
+        if c == "UNKNOWN":
             continue
+            
+        print(f"\nProcessing {c}...")
         
-        subprocess.run([
-            sys.executable, "courses/MTH240/scripts/extract_raw.py",
-            "--input", str(pdf),
-            "--output", str(output)
-        ])
-    
-    # Generate enrichment queue
-    print("\nGenerating enrichment queue...")
-    subprocess.run([
-        sys.executable, "courses/MTH240/scripts/enrich_with_ai.py",
-        "--list"
-    ])
+        # Run deduplication if script exists
+        dedup_script = Path(f"courses/{c}/scripts/deduplicate.py")
+        if dedup_script.exists():
+            subprocess.run([sys.executable, str(dedup_script)])
+        
+        # Run raw extraction
+        raw_script = Path(f"courses/{c}/scripts/extract_raw.py")
+        if raw_script.exists():
+            for pdf in Path(f"courses/{c}/raw").glob("*.pdf"):
+                output = Path(f"courses/{c}/processing") / f"{pdf.stem}_raw.json"
+                if output.exists():
+                    continue
+                subprocess.run([
+                    sys.executable, str(raw_script),
+                    "--input", str(pdf),
+                    "--output", str(output)
+                ])
     
     print("\n" + "="*50)
     print("Upload processing complete!")
-    print(f"PDFs in: courses/{course}/raw/")
-    print(f"Raw JSON in: courses/{course}/processing/")
-    print("\nNext: Agent will manually enrich questions")
+    print("Agent will now manually enrich questions")
     print("="*50)
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--zip", required=True, help="Path to uploaded zip")
+    parser.add_argument("--zip", required=True)
     args = parser.parse_args()
     
     process_zip(Path(args.zip))
