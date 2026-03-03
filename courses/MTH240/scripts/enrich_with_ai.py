@@ -143,3 +143,30 @@ if __name__ == "__main__":
             print(generate_enrichment_prompt(json_file))
         else:
             print(f"File not found: {json_file}")
+
+def generate_merge_prompt(group_data: dict) -> str:
+    """Generate prompt for merging exam + solutions"""
+    
+    merge_info = group_data.get("_merge_info", {})
+    exam_file = merge_info.get("exam_file")
+    sol_file = merge_info.get("solution_file")
+    
+    prompt = f"""# AI Merge Task: Combine Exam + Solutions
+
+## Files to Merge:
+- Exam: {exam_file}
+- Solutions: {sol_file}
+
+## Task:
+Match each question in the exam with its corresponding solution.
+
+## Rules:
+1. Questions without solutions: mark solution.provider = "none"
+2. Questions with solutions: mark solution.provider = "professor"
+3. Verify solution matches question (don't blindly pair)
+4. If solution seems wrong/incomplete, flag it
+
+## Output:
+Complete JSON with questions[].solution populated from solution file.
+"""
+    return prompt
